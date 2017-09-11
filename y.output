@@ -1,0 +1,34 @@
+
+state 0
+	$accept: .root $end 
+
+	NUMBER  shift 2
+	.  error
+
+	root  goto 1
+
+state 1
+	$accept:  root.$end 
+
+	$end  accept
+	.  error
+
+
+state 2
+	root:  NUMBER.    (1)
+
+	.  reduce 1 (src line 36)
+
+
+26 terminals, 2 nonterminals
+2 grammar rules, 3/8000 states
+0 shift/reduce, 0 reduce/reduce conflicts reported
+51 working sets used
+memory: parser 0/120000
+0 extra closures
+1 shift entries, 1 exceptions
+1 goto entries
+0 entries saved by goto default
+Optimizer space used: output 2/120000
+2 table entries, 0 zero
+maximum spread: 17, maximum offset: 17
