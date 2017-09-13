@@ -35,20 +35,7 @@ type and struct{}
 type or struct{}
 type not struct{}
 
-type tru struct{}
-type fals struct{}
-type null struct{}
-type strict struct{}
-type lax struct{}
-type last struct{}
-type to struct{}
-type exists struct{}
-type likeRegex struct{}
-type flag struct{}
-type starts struct{}
-type with struct{}
-type is struct{}
-type unknown struct{}
+type keyword struct{ which int }
 
 type funcType struct{}
 type funcSize struct{}
@@ -74,20 +61,7 @@ func (s and) Lexeme() string { return "&&" }
 func (s or) Lexeme() string  { return "||" }
 func (s not) Lexeme() string { return "!" }
 
-func (s tru) Lexeme() string       { return "true" }
-func (s fals) Lexeme() string      { return "false" }
-func (s null) Lexeme() string      { return "null" }
-func (s strict) Lexeme() string    { return "strict" }
-func (s lax) Lexeme() string       { return "lax" }
-func (s last) Lexeme() string      { return "last" }
-func (s to) Lexeme() string        { return "to" }
-func (s exists) Lexeme() string    { return "exists" }
-func (s likeRegex) Lexeme() string { return "like_regex" }
-func (s flag) Lexeme() string      { return "flag" }
-func (s starts) Lexeme() string    { return "starts" }
-func (s with) Lexeme() string      { return "with" }
-func (s is) Lexeme() string        { return "is" }
-func (s unknown) Lexeme() string   { return "unknown" }
+func (s keyword) Lexeme() string { return invertedKeywords[s.which] }
 
 func (s funcType) Lexeme() string     { return "type" }
 func (s funcSize) Lexeme() string     { return "size" }
@@ -113,20 +87,7 @@ func (s and) identifier() int { return AND }
 func (s or) identifier() int  { return OR }
 func (s not) identifier() int { return UNOT }
 
-func (s tru) identifier() int       { return TRUE }
-func (s fals) identifier() int      { return FALSE }
-func (s null) identifier() int      { return NULL }
-func (s strict) identifier() int    { return STRICT }
-func (s lax) identifier() int       { return LAX }
-func (s last) identifier() int      { return LAST }
-func (s to) identifier() int        { return TO }
-func (s exists) identifier() int    { return EXISTS }
-func (s likeRegex) identifier() int { return LIKE_REGEX }
-func (s flag) identifier() int      { return FLAG }
-func (s starts) identifier() int    { return STARTS }
-func (s with) identifier() int      { return WITH }
-func (s is) identifier() int        { return IS }
-func (s unknown) identifier() int   { return UNKNOWN }
+func (s keyword) identifier() int { return s.which }
 
 func (s funcType) identifier() int     { return FUNC_TYPE }
 func (s funcSize) identifier() int     { return FUNC_SIZE }
@@ -400,21 +361,29 @@ func opState(l *lexer) stateFn {
 	return startState
 }
 
-var keywords = map[string]jsonpathSym{
-	"true":       tru{},
-	"false":      fals{},
-	"null":       null{},
-	"strict":     strict{},
-	"lax":        lax{},
-	"last":       last{},
-	"to":         to{},
-	"exists":     exists{},
-	"like_regex": likeRegex{},
-	"flag":       flag{},
-	"starts":     starts{},
-	"with":       with{},
-	"is":         is{},
-	"unknown":    unknown{},
+var keywords = map[string]int{
+	"true":       TRUE,
+	"false":      FALSE,
+	"null":       NULL,
+	"strict":     STRICT,
+	"lax":        LAX,
+	"last":       LAST,
+	"to":         TO,
+	"exists":     EXISTS,
+	"like_regex": LIKE_REGEX,
+	"flag":       FLAG,
+	"starts":     STARTS,
+	"with":       WITH,
+	"is":         IS,
+	"unknown":    UNKNOWN,
+}
+
+var invertedKeywords = map[int]string{}
+
+func init() {
+	for k, v := range keywords {
+		invertedKeywords[v] = k
+	}
 }
 
 func keywordState(l *lexer) stateFn {
@@ -422,7 +391,7 @@ func keywordState(l *lexer) stateFn {
 		l.advance(1)
 	}
 	if sym, ok := keywords[l.current()]; ok {
-		l.emit(sym)
+		l.emit(keyword{sym})
 	} else {
 		l.err("unrecognized keyword \"%s\"", l.current())
 	}
