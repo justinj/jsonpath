@@ -12,18 +12,18 @@ type parseTestCase struct {
 
 func TestParseComplete(t *testing.T) {
 	testCases := []parseTestCase{
-		{"1", Number{val: 1}},
+		{"1", NumberExpr{val: 1}},
 		{"1+1*1",
 			BinExpr{
 				t:     plusBinOp,
-				left:  Number{val: 1},
-				right: BinExpr{t: timesBinOp, left: Number{val: 1}, right: Number{val: 1}},
+				left:  NumberExpr{val: 1},
+				right: BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
 			}},
 		{"1*1+1",
 			BinExpr{
 				t:     plusBinOp,
-				left:  BinExpr{t: timesBinOp, left: Number{val: 1}, right: Number{val: 1}},
-				right: Number{val: 1},
+				left:  BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
+				right: NumberExpr{val: 1},
 			}},
 	}
 	for _, tc := range testCases {
@@ -61,7 +61,6 @@ func TestParse(t *testing.T) {
 		"$a + 1",
 		"$foobar",
 		"$",
-		"@",
 		"last",
 
 		"$.foo",
@@ -108,14 +107,37 @@ func TestParse(t *testing.T) {
 		"$ ? (!\"foo\" is unknown)",
 		// ^^^ should this be allowed?
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			parser := yyNewParser()
-			tok := tokens(tc)
-			parser.Parse(tok)
+			res, err := Parse(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if FormatNode(res) != tc {
+				t.Errorf("expected `%s`, got `%s`", tc, FormatNode(res))
+			}
+		})
+	}
+}
 
-			if FormatNode(tok.expr) != tc {
-				t.Errorf("expected `%s`, got `%s`", tc, FormatNode(tok.expr))
+func TestParseError(t *testing.T) {
+	testCases := []struct {
+		input  string
+		errMsg string
+	}{
+		{"(", "syntax error: unexpected $end"},
+		{"@.foo", "@ only allowed within filter expressions"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			_, err := Parse(tc.input)
+			if err == nil {
+				t.Fatalf("expected \"%s\" to error with \"%s\", but no error occurred", tc.input, tc.errMsg)
+			}
+			if err.Error() != tc.errMsg {
+				t.Fatalf("expected \"%s\" to error with \"%s\", but error was \"%s\"", tc.input, tc.errMsg, err.Error())
 			}
 		})
 	}

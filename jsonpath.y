@@ -77,7 +77,7 @@ root:
 expr:
     '(' expr ')'
     {
-      $$ = Paren{val: $2}
+      $$ = ParenExpr{val: $2}
     }
     | expr '+' expr
     {
@@ -117,23 +117,27 @@ primary:
 /* 6.9.1 */
 literal:
      NUMBER
-    | TRUE { $$ = BoolNode{val: true} }
-    | FALSE { $$ = BoolNode{val: false} }
-    | NULL { $$ = NullNode{} }
-    | STR { $$ = StringNode{$1} }
+    | TRUE { $$ = BoolExpr{val: true} }
+    | FALSE { $$ = BoolExpr{val: false} }
+    | NULL { $$ = NullExpr{} }
+    | STR { $$ = StringExpr{$1} }
 
 /* 6.9.2 */
 variable:
-    IDENT  { $$ = Variable{name: $1} }
-    | '@'  { $$ = AtSign{} }
-    | LAST { $$ = Last{} }
+    IDENT  { $$ = VariableExpr{name: $1} }
+    | '@' 
+    {
+      yylex.(*tokenStream).observeAt()
+      $$ = AtExpr{}
+    }
+    | LAST { $$ = LastExpr{} }
 
 /* 6.10 */
 accessor_expr:
         primary
       | accessor_expr accessor
       {
-        $$ = AccessNode{ left: $1, right: $2 }
+        $$ = AccessExpr{ left: $1, right: $2 }
       }
 
 accessor:
@@ -198,13 +202,14 @@ method:
       | FUNC_CEILING '(' ')' { $$ = FuncNode{ceilingFunction, nil} }
       | FUNC_FLOOR '(' ')' { $$ = FuncNode{floorFunction, nil} }
       | FUNC_ABS '(' ')' { $$ = FuncNode{absFunction, nil} }
-      | FUNC_DATETIME '(' STR ')' { $$ = FuncNode{datetimeFunction, StringNode{$3}} }
+      | FUNC_DATETIME '(' STR ')' { $$ = FuncNode{datetimeFunction, StringExpr{$3}} }
       | FUNC_KEYVALUE '(' ')' { $$ = FuncNode{keyvalueFunction, nil} }
 
 /* 6.13 */
 filter_expression:
    '?' '(' predicate_primary ')'
     {
+      yylex.(*tokenStream).clearAt()
       $$ = FilterNode{pred: $3}
     }
 
@@ -216,7 +221,7 @@ delimited_predicate:
   exists_pred
   | '(' predicate_primary ')'
   {
-    $$ = Paren{$2}
+    $$ = ParenExpr{$2}
   }
 
 non_delimited_predicate:

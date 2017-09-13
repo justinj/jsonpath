@@ -46,6 +46,7 @@ func TestLex(t *testing.T) {
 		{"1 * 2", []string{"1", "*", "2"}, []int{NUMBER, '*', NUMBER}},
 		{"1 / 2", []string{"1", "/", "2"}, []int{NUMBER, '/', NUMBER}},
 		{"1 % 2", []string{"1", "%", "2"}, []int{NUMBER, '%', NUMBER}},
+		{"''", []string{"''"}, []int{STR}},
 		{"'hello world'", []string{"'hello world'"}, []int{STR}},
 		{"\"hello world\"", []string{"'hello world'"}, []int{STR}},
 		{"'hi \\'foo\\''", []string{"'hi 'foo''"}, []int{STR}},
@@ -60,7 +61,7 @@ func TestLex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			c := lex(tc.input)
+			_, c := lex(tc.input)
 			result := make([]string, 0)
 			resultIdents := make([]int, 0)
 
@@ -84,23 +85,32 @@ func TestLexErrors(t *testing.T) {
 	testCases := []struct {
 		input         string
 		expectedError string
+		expectedBegin int
+		expectedEnd   int
 	}{
-		{"1 = 1", "use == instead of ="},
-		{"1 | 1", "| must be followed by |"},
-		{"foo", "unrecognized keyword \"foo\""},
-		{"\"hello", "unterminated string"},
-		{"\"\\y\"", "invalid escape sequence \"\\y\""},
-		{"$.bar()", "invalid function \"bar\""},
+		{"1 = 1", "use == instead of =", 2, 2},
+		{"1 | 1", "| must be followed by |", 2, 2},
+		{"foo", "unrecognized keyword \"foo\"", 0, 2},
+		{"\"hello", "unterminated string", 0, 5},
+		{"\"\\y\"", "invalid escape sequence \"\\y\"", 2, 2},
+		{"$.bar()", "invalid function \"bar\"", 2, 4},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			c := lex(tc.input)
+			_, c := lex(tc.input)
 
 			for elem := range c {
 				if err, ok := elem.(errSym); ok {
 					if err.msg != tc.expectedError {
 						t.Fatalf("expected \"%s\", got \"%s\"", tc.expectedError, err.msg)
+					}
+					if err.begin != tc.expectedBegin && err.end != tc.expectedEnd {
+						t.Fatalf(
+							"expected error to encompass [%d, %d], but was [%d, %d]",
+							tc.expectedBegin, tc.expectedEnd,
+							err.begin, err.end,
+						)
 					}
 					return
 				}

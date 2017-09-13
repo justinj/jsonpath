@@ -37,7 +37,11 @@ type not struct{}
 
 type keyword struct{ which int }
 
-type errSym struct{ msg string }
+type errSym struct {
+	msg   string
+	begin int
+	end   int
+}
 
 func (s singleCh) Lexeme() string { return string(s.ch) }
 func (s ident) Lexeme() string    { return s.val }
@@ -108,6 +112,10 @@ func (l *lexer) advance(i int) {
 	l.pos += i
 }
 
+func (l *lexer) scooch(i int) {
+	l.start += i
+}
+
 func (l *lexer) gobble(i int) {
 	if l.start < l.pos {
 		panic("can only gobble without advancing")
@@ -130,7 +138,7 @@ func (l *lexer) emit(sym jsonpathSym) {
 }
 
 func (l *lexer) err(msg string, args ...interface{}) {
-	l.emit(errSym{fmt.Sprintf(msg, args...)})
+	l.emit(errSym{fmt.Sprintf(msg, args...), l.start, l.pos})
 }
 
 func (l *lexer) current() string {
@@ -225,7 +233,7 @@ func reescape(s string, quoteChar rune) string {
 }
 
 func parseString(l *lexer, quoteChar rune) stateFn {
-	l.gobble(1)
+	l.advance(1)
 	ch := l.peek()
 	for ch != quoteChar {
 		if ch == eof {
@@ -242,6 +250,7 @@ func parseString(l *lexer, quoteChar rune) stateFn {
 		l.advance(1)
 		ch = l.peek()
 	}
+	l.scooch(1)
 	l.emit(str{reescape(l.current(), quoteChar)})
 	l.gobble(1)
 	return startState
@@ -414,8 +423,11 @@ func identifierFollowingDotState(l *lexer) stateFn {
 }
 
 type tokenStream struct {
-	expr  jsonPathNode
-	items chan jsonpathSym
+	expr   jsonPathNode
+	items  chan jsonpathSym
+	err    error
+	lexer  *lexer
+	seenAt bool
 }
 
 func (t *tokenStream) Lex(lval *yySymType) int {
@@ -427,7 +439,7 @@ func (t *tokenStream) Lex(lval *yySymType) int {
 	case singleCh:
 		return n.ch
 	case number:
-		lval.val = Number{val: n.val}
+		lval.val = NumberExpr{val: n.val}
 	case ident:
 		lval.str = n.val
 	case str:
@@ -437,16 +449,26 @@ func (t *tokenStream) Lex(lval *yySymType) int {
 }
 
 func (t *tokenStream) Error(e string) {
-	panic(e)
+	t.err = fmt.Errorf(e)
 }
 
 func tokens(input string) *tokenStream {
+	lexer, items := lex(input)
 	return &tokenStream{
-		items: lex(input),
+		lexer: lexer,
+		items: items,
 	}
 }
 
-func lex(input string) chan jsonpathSym {
+func (t *tokenStream) observeAt() {
+	t.seenAt = true
+}
+
+func (t *tokenStream) clearAt() {
+	t.seenAt = false
+}
+
+func lex(input string) (*lexer, chan jsonpathSym) {
 	c := make(chan jsonpathSym)
 	l := lexer{
 		input: []rune(input),
@@ -455,5 +477,5 @@ func lex(input string) chan jsonpathSym {
 		items: c,
 	}
 	go l.run()
-	return c
+	return &l, c
 }
