@@ -37,15 +37,6 @@ type not struct{}
 
 type keyword struct{ which int }
 
-type funcType struct{}
-type funcSize struct{}
-type funcDouble struct{}
-type funcCeiling struct{}
-type funcFloor struct{}
-type funcAbs struct{}
-type funcDatetime struct{}
-type funcKeyvalue struct{}
-
 type errSym struct{ msg string }
 
 func (s singleCh) Lexeme() string { return string(s.ch) }
@@ -63,15 +54,6 @@ func (s not) Lexeme() string { return "!" }
 
 func (s keyword) Lexeme() string { return invertedKeywords[s.which] }
 
-func (s funcType) Lexeme() string     { return "type" }
-func (s funcSize) Lexeme() string     { return "size" }
-func (s funcDouble) Lexeme() string   { return "double" }
-func (s funcCeiling) Lexeme() string  { return "ceiling" }
-func (s funcFloor) Lexeme() string    { return "floor" }
-func (s funcAbs) Lexeme() string      { return "abs" }
-func (s funcDatetime) Lexeme() string { return "datetime" }
-func (s funcKeyvalue) Lexeme() string { return "keyvalue" }
-
 func (s errSym) Lexeme() string { return s.msg }
 
 func (s singleCh) identifier() int { return s.ch }
@@ -88,15 +70,6 @@ func (s or) identifier() int  { return OR }
 func (s not) identifier() int { return UNOT }
 
 func (s keyword) identifier() int { return s.which }
-
-func (s funcType) identifier() int     { return FUNC_TYPE }
-func (s funcSize) identifier() int     { return FUNC_SIZE }
-func (s funcDouble) identifier() int   { return FUNC_DOUBLE }
-func (s funcCeiling) identifier() int  { return FUNC_CEILING }
-func (s funcFloor) identifier() int    { return FUNC_FLOOR }
-func (s funcAbs) identifier() int      { return FUNC_ABS }
-func (s funcDatetime) identifier() int { return FUNC_DATETIME }
-func (s funcKeyvalue) identifier() int { return FUNC_KEYVALUE }
 
 func (s errSym) identifier() int { return -1 }
 
@@ -378,10 +351,24 @@ var keywords = map[string]int{
 	"unknown":    UNKNOWN,
 }
 
+var funcs = map[string]int{
+	"type":     FUNC_TYPE,
+	"size":     FUNC_SIZE,
+	"double":   FUNC_DOUBLE,
+	"ceiling":  FUNC_CEILING,
+	"floor":    FUNC_FLOOR,
+	"abs":      FUNC_ABS,
+	"datetime": FUNC_DATETIME,
+	"keyvalue": FUNC_KEYVALUE,
+}
+
 var invertedKeywords = map[int]string{}
 
 func init() {
 	for k, v := range keywords {
+		invertedKeywords[v] = k
+	}
+	for k, v := range funcs {
 		invertedKeywords[v] = k
 	}
 }
@@ -406,17 +393,6 @@ func identifierState(l *lexer) stateFn {
 	return startState
 }
 
-var funcs = map[string]jsonpathSym{
-	"type":     funcType{},
-	"size":     funcSize{},
-	"double":   funcDouble{},
-	"ceiling":  funcCeiling{},
-	"floor":    funcFloor{},
-	"abs":      funcAbs{},
-	"datetime": funcDatetime{},
-	"keyvalue": funcKeyvalue{},
-}
-
 func identifierFollowingDotState(l *lexer) stateFn {
 	for validIdentifierChar(l.peek()) {
 		l.advance(1)
@@ -429,7 +405,7 @@ func identifierFollowingDotState(l *lexer) stateFn {
 	} else {
 		name := strings.TrimRight(l.current(), " ")
 		if n, ok := funcs[name]; ok {
-			l.emit(n)
+			l.emit(keyword{n})
 		} else {
 			l.err("invalid function \"%s\"", name)
 		}
