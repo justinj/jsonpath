@@ -3,8 +3,9 @@ package jsonpath
 import "fmt"
 
 type validationVisitor struct {
-	err         error
-	filterDepth int
+	err                error
+	filterDepth        int
+	arrayAccessorDepth int
 }
 
 func (v *validationVisitor) VisitPre(n jsonPathNode) bool {
@@ -13,6 +14,12 @@ func (v *validationVisitor) VisitPre(n jsonPathNode) bool {
 	}
 
 	switch t := n.(type) {
+	case ArrayAccessor:
+		v.arrayAccessorDepth++
+	case LastExpr:
+		if v.arrayAccessorDepth == 0 {
+			v.err = fmt.Errorf("`last` can only appear inside an array subscript")
+		}
 	case FilterNode:
 		v.filterDepth++
 	case VariableExpr:
@@ -25,6 +32,8 @@ func (v *validationVisitor) VisitPre(n jsonPathNode) bool {
 
 func (v *validationVisitor) VisitPost(n jsonPathNode) {
 	switch n.(type) {
+	case ArrayAccessor:
+		v.arrayAccessorDepth--
 	case FilterNode:
 		v.filterDepth--
 	}

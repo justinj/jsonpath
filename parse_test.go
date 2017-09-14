@@ -61,7 +61,7 @@ func TestParse(t *testing.T) {
 		"$a + 1",
 		"$foobar",
 		"$",
-		"last",
+		"$[last]",
 
 		"$.foo",
 		"$.\"$foo\"",
@@ -131,6 +131,7 @@ func TestParseError(t *testing.T) {
 		{"$ ? (@.foo is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
 		{"@.foo + $ ? (@.foo is unknown)[*]", "@ only allowed within filter expressions"},
 		{"$ ? (@.foo)", "filter expressions cannot be raw json values - if you expect `@.foo` to be boolean true, write `@.foo == true`"},
+		{"last", "`last` can only appear inside an array subscript"},
 	}
 
 	for _, tc := range testCases {
