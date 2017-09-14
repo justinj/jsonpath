@@ -1,6 +1,8 @@
 %{
 package jsonpath
 
+import "fmt"
+
 type jsonpathSymUnion struct {
   val interface{}
 }
@@ -210,6 +212,13 @@ filter_expression:
     {
       $$ = FilterNode{pred: $3}
     }
+  | '?' '(' expr ')'
+    {
+      n := FormatNode($3)
+      yylex.(*tokenStream).err = fmt.Errorf("filter expressions cannot be raw json values - if you expect `%s` to be boolean true, write `%s == true`", n, n)
+      return 0
+    }
+
 
 predicate_primary:
     delimited_predicate

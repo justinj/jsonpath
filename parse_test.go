@@ -130,6 +130,7 @@ func TestParseError(t *testing.T) {
 		{"@.foo", "@ only allowed within filter expressions"},
 		{"$ ? (@.foo is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
 		{"@.foo + $ ? (@.foo is unknown)[*]", "@ only allowed within filter expressions"},
+		{"$ ? (@.foo)", "filter expressions cannot be raw json values - if you expect `@.foo` to be boolean true, write `@.foo == true`"},
 	}
 
 	for _, tc := range testCases {
