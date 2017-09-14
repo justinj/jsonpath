@@ -7,6 +7,15 @@ import (
 type jsonPathNode interface {
 	Format(*bytes.Buffer)
 	Walk(visitor)
+
+	naiveEval(*naiveEvalContext) (jsonSequence, error)
+}
+
+type accessor interface {
+	Format(*bytes.Buffer)
+	Walk(visitor)
+
+	naiveAccess(*naiveEvalContext, jsonSequence) (jsonSequence, error)
 }
 
 type binExprType int
@@ -66,7 +75,7 @@ type StringExpr struct{ val string }
 
 type AccessExpr struct {
 	left  jsonPathNode
-	right jsonPathNode
+	right accessor
 }
 
 type DotAccessor struct {

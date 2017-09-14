@@ -12,6 +12,7 @@ type jsonpathSymUnion struct {
 %union {
   val jsonPathNode
   vals []jsonPathNode
+  accessor accessor
   str string
 }
 
@@ -37,18 +38,17 @@ type jsonpathSymUnion struct {
 %type <val> primary
 %type <val> variable
 %type <val> literal
-%type <val> member_accessor
 %type <val> accessor_expr
-%type <val> accessor
-%type <val> member_accessor
-%type <val> member_accessor_wildcard
-%type <val> array_accessor
+%type <accessor> accessor
+%type <accessor> member_accessor
+%type <accessor> member_accessor_wildcard
+%type <accessor> array_accessor
 %type <vals> subscript_list
 %type <val> subscript
-%type <val> wildcard_array_accessor
-%type <val> item_method
-%type <val> method
-%type <val> filter_expression
+%type <accessor> wildcard_array_accessor
+%type <accessor> item_method
+%type <accessor> method
+%type <accessor> filter_expression
 %type <val> predicate_primary
 %type <val> delimited_predicate
 %type <val> non_delimited_predicate
