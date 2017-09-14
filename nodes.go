@@ -4,14 +4,9 @@ import (
 	"bytes"
 )
 
-type visitor interface {
-	VisitPre(jsonPathNode)
-	VisitPost(jsonPathNode)
-}
-
 type jsonPathNode interface {
 	Format(*bytes.Buffer)
-	Walk(*visitor)
+	Walk(visitor)
 }
 
 type binExprType int
@@ -52,7 +47,7 @@ type UnaryExpr struct {
 }
 
 type ParenExpr struct {
-	val jsonPathNode
+	expr jsonPathNode
 }
 
 type NumberExpr struct {
@@ -63,7 +58,6 @@ type VariableExpr struct {
 	name string
 }
 
-type AtExpr struct{}
 type LastExpr struct{}
 
 type BoolExpr struct{ val bool }

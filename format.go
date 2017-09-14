@@ -64,16 +64,12 @@ func (s UnaryExpr) Format(b *bytes.Buffer) {
 
 func (s ParenExpr) Format(b *bytes.Buffer) {
 	b.WriteByte('(')
-	s.val.Format(b)
+	s.expr.Format(b)
 	b.WriteByte(')')
 }
 
 func (s VariableExpr) Format(b *bytes.Buffer) {
 	b.WriteString(s.name)
-}
-
-func (s AtExpr) Format(b *bytes.Buffer) {
-	b.WriteByte('@')
 }
 
 func (s LastExpr) Format(b *bytes.Buffer) {

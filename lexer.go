@@ -423,11 +423,10 @@ func identifierFollowingDotState(l *lexer) stateFn {
 }
 
 type tokenStream struct {
-	expr   jsonPathNode
-	items  chan jsonpathSym
-	err    error
-	lexer  *lexer
-	seenAt bool
+	expr  jsonPathNode
+	items chan jsonpathSym
+	err   error
+	lexer *lexer
 }
 
 func (t *tokenStream) Lex(lval *yySymType) int {
@@ -458,14 +457,6 @@ func tokens(input string) *tokenStream {
 		lexer: lexer,
 		items: items,
 	}
-}
-
-func (t *tokenStream) observeAt() {
-	t.seenAt = true
-}
-
-func (t *tokenStream) clearAt() {
-	t.seenAt = false
 }
 
 func lex(input string) (*lexer, chan jsonpathSym) {

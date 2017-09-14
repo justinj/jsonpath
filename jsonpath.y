@@ -77,7 +77,7 @@ root:
 expr:
     '(' expr ')'
     {
-      $$ = ParenExpr{val: $2}
+      $$ = ParenExpr{$2}
     }
     | expr '+' expr
     {
@@ -127,8 +127,7 @@ variable:
     IDENT  { $$ = VariableExpr{name: $1} }
     | '@' 
     {
-      yylex.(*tokenStream).observeAt()
-      $$ = AtExpr{}
+      $$ = VariableExpr{name: "@"}
     }
     | LAST { $$ = LastExpr{} }
 
@@ -209,7 +208,6 @@ method:
 filter_expression:
    '?' '(' predicate_primary ')'
     {
-      yylex.(*tokenStream).clearAt()
       $$ = FilterNode{pred: $3}
     }
 

@@ -128,6 +128,8 @@ func TestParseError(t *testing.T) {
 	}{
 		{"(", "syntax error: unexpected $end"},
 		{"@.foo", "@ only allowed within filter expressions"},
+		{"$ ? (@.foo is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
+		{"@.foo + $ ? (@.foo is unknown)[*]", "@ only allowed within filter expressions"},
 	}
 
 	for _, tc := range testCases {
