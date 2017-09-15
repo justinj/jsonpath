@@ -91,7 +91,7 @@ func (n NullExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
 }
 
 func (n StringExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
+	return jsonSequence{n.val}, nil
 }
 
 func (n AccessExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
@@ -116,12 +116,19 @@ func (n DotAccessor) naiveAccess(ctx *naiveEvalContext, node jsonSequence) (json
 	return result, nil
 }
 
-func (n MemberWildcardAccessor) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
-}
-
-func (n MemberWildcardAccessor) naiveAccess(_ *naiveEvalContext, _ jsonSequence) (jsonSequence, error) {
-	return nil, nil
+func (n MemberWildcardAccessor) naiveAccess(ctx *naiveEvalContext, s jsonSequence) (jsonSequence, error) {
+	// TODO: try to estimate size...
+	result := make(jsonSequence, 0)
+	for _, e := range s {
+		if obj, ok := e.(map[string]interface{}); ok {
+			for _, v := range obj {
+				result = append(result, v)
+			}
+		} else {
+			return nil, fmt.Errorf("arguments to `.*` must be objects")
+		}
+	}
+	return result, nil
 }
 
 func (n ArrayAccessor) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
@@ -149,7 +156,7 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 				if idx, ok := i.(float64); ok {
 					if s.end == nil {
 						if int(idx) < 0 || int(idx) >= len(ary) {
-							return nil, fmt.Errorf("array index out of bounds")
+							return nil, fmt.Errorf("array index %d out of bounds", int(idx))
 						}
 						result = append(result, ary[int(idx)])
 					} else {
@@ -162,17 +169,22 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 						}
 						j := end[0]
 						if idxEnd, ok := j.(float64); ok {
+							if idxEnd < idx {
+								return nil, fmt.Errorf("the end of a range must be greater than the beginning")
+							}
 							for i := idx; i <= idxEnd; i++ {
 								if int(i) < 0 || int(i) >= len(ary) {
 									return nil, fmt.Errorf("array index out of bounds")
 								}
 								result = append(result, ary[int(i)])
 							}
+						} else {
+							return nil, fmt.Errorf("array index must be a number, but found %#v", j)
 						}
 					}
 				} else {
 					//TODO improve error message
-					return nil, fmt.Errorf("index must be number")
+					return nil, fmt.Errorf("array index must be a number, but found %#v", i)
 				}
 			}
 		}
@@ -185,12 +197,20 @@ func (n RangeSubscriptNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error)
 	return nil, nil
 }
 
-func (n WildcardArrayAccessor) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
-}
-
-func (n WildcardArrayAccessor) naiveAccess(_ *naiveEvalContext, _ jsonSequence) (jsonSequence, error) {
-	return nil, nil
+func (n WildcardArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
+	// TODO: handle lax vs. strict mode here
+	result := make(jsonSequence, 0, len(val))
+	for _, e := range val {
+		if ary, ok := e.([]interface{}); ok {
+			for _, elem := range ary {
+				result = append(result, elem)
+			}
+		} else {
+			// TODO: this is lax mode semantics, strict would error here
+			result = append(result, e)
+		}
+	}
+	return result, nil
 }
 
 func (n FuncNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
