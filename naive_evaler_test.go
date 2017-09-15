@@ -23,6 +23,10 @@ func TestNaiveEval(t *testing.T) {
 		{"$.foo.bar", `{"foo": {"bar": 2}}`, []string{"2"}},
 		{"$[0]", `[1, 2, 3]`, []string{"1"}},
 		{"$[0, 2]", `[1, 2, 3]`, []string{"1", "3"}},
+		{"$[last]", `[1, 2, 3]`, []string{"3"}},
+		{"$[last - 1]", `[1, 2, 3]`, []string{"2"}},
+		{"$[$[last] - 1]", `[1, 2, 3]`, []string{"3"}},
+		{"$[0 to 1]", `[1, 2, 3]`, []string{"1", "2"}},
 	}
 
 	for _, tc := range testCases {
@@ -60,3 +64,7 @@ func TestNaiveEval(t *testing.T) {
 		})
 	}
 }
+
+// error test cases
+
+// {"$[100]", `[1, 2, 3]`, []string{"1", "2"}},

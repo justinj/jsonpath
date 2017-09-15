@@ -8,7 +8,8 @@ type NaiveEvaler struct {
 }
 
 type naiveEvalContext struct {
-	dollar jsonValue
+	dollar                 jsonValue
+	containingArrayLengths []float64
 }
 
 type jsonValue interface{}
@@ -16,7 +17,8 @@ type jsonSequence []jsonValue
 
 func (n NaiveEvaler) Run(dollar jsonValue) (jsonSequence, error) {
 	return n.program.naiveEval(&naiveEvalContext{
-		dollar: dollar,
+		dollar:                 dollar,
+		containingArrayLengths: make([]float64, 0, 10),
 	})
 }
 
@@ -76,8 +78,8 @@ func (n VariableExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 	return jsonSequence{ctx.dollar}, nil
 }
 
-func (n LastExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
+func (n LastExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
+	return jsonSequence{ctx.containingArrayLengths[len(ctx.containingArrayLengths)-1]}, nil
 }
 
 func (n BoolExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
@@ -130,20 +132,44 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 	// TODO: try to come up with a sensible estimate of the size of this.
 	// if there is no reference to `last`, then we should know the exact size
 	result := make(jsonSequence, 0, len(val))
+	ctx.containingArrayLengths = append(ctx.containingArrayLengths, 0)
 	for _, e := range val {
 		if ary, ok := e.([]interface{}); ok {
+			ctx.containingArrayLengths[len(ctx.containingArrayLengths)-1] = float64(len(ary) - 1)
 			for _, s := range n.subscripts {
-				index, err := s.start.naiveEval(ctx)
+				start, err := s.start.naiveEval(ctx)
 				if err != nil {
 					return nil, err
 				}
-				if len(index) != 1 {
+				if len(start) != 1 {
 					//TODO improve error message
 					return nil, fmt.Errorf("indexes must return single value")
 				}
-				i := index[0]
+				i := start[0]
 				if idx, ok := i.(float64); ok {
-					result = append(result, ary[int(idx)])
+					if s.end == nil {
+						if int(idx) < 0 || int(idx) >= len(ary) {
+							return nil, fmt.Errorf("array index out of bounds")
+						}
+						result = append(result, ary[int(idx)])
+					} else {
+						end, err := s.end.naiveEval(ctx)
+						if err != nil {
+							return nil, err
+						}
+						if len(end) != 1 {
+							return nil, fmt.Errorf("indexes must return single value")
+						}
+						j := end[0]
+						if idxEnd, ok := j.(float64); ok {
+							for i := idx; i <= idxEnd; i++ {
+								if int(i) < 0 || int(i) >= len(ary) {
+									return nil, fmt.Errorf("array index out of bounds")
+								}
+								result = append(result, ary[int(i)])
+							}
+						}
+					}
 				} else {
 					//TODO improve error message
 					return nil, fmt.Errorf("index must be number")
@@ -151,6 +177,7 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 			}
 		}
 	}
+	ctx.containingArrayLengths = ctx.containingArrayLengths[:len(ctx.containingArrayLengths)-1]
 	return result, nil
 }
 
