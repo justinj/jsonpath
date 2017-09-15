@@ -121,10 +121,12 @@ func (s ArrayAccessor) Format(b *bytes.Buffer) {
 	b.WriteByte(']')
 }
 
-func (s RangeNode) Format(b *bytes.Buffer) {
+func (s RangeSubscriptNode) Format(b *bytes.Buffer) {
 	s.start.Format(b)
-	b.WriteString(" to ")
-	s.end.Format(b)
+	if s.end != nil {
+		b.WriteString(" to ")
+		s.end.Format(b)
+	}
 }
 
 func (s WildcardArrayAccessor) Format(b *bytes.Buffer) {

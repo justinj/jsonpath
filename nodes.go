@@ -7,6 +7,11 @@ import (
 type jsonPathNode interface {
 	Format(*bytes.Buffer)
 	Walk(visitor)
+}
+
+type jsonPathExpr interface {
+	Format(*bytes.Buffer)
+	Walk(visitor)
 
 	naiveEval(*naiveEvalContext) (jsonSequence, error)
 }
@@ -38,8 +43,8 @@ const (
 
 type BinExpr struct {
 	t     binExprType
-	left  jsonPathNode
-	right jsonPathNode
+	left  jsonPathExpr
+	right jsonPathExpr
 }
 
 type unaryExprType int
@@ -74,7 +79,7 @@ type NullExpr struct{ val bool }
 type StringExpr struct{ val string }
 
 type AccessExpr struct {
-	left  jsonPathNode
+	left  jsonPathExpr
 	right accessor
 }
 
@@ -85,13 +90,13 @@ type DotAccessor struct {
 
 type MemberWildcardAccessor struct{}
 
-type ArrayAccessor struct {
-	subscripts []jsonPathNode
+type RangeSubscriptNode struct {
+	start jsonPathExpr
+	end   jsonPathExpr
 }
 
-type RangeNode struct {
-	start jsonPathNode
-	end   jsonPathNode
+type ArrayAccessor struct {
+	subscripts []RangeSubscriptNode
 }
 
 type WildcardArrayAccessor struct{}

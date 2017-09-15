@@ -1,6 +1,6 @@
 package jsonpath
 
-func Parse(input string) (jsonPathNode, error) {
+func Parse(input string) (jsonPathExpr, error) {
 	yyErrorVerbose = true
 	parser := yyNewParser()
 	tok := tokens(input)

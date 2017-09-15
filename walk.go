@@ -92,10 +92,12 @@ func (n ArrayAccessor) Walk(v visitor) {
 	}
 }
 
-func (n RangeNode) Walk(v visitor) {
+func (n RangeSubscriptNode) Walk(v visitor) {
 	if rec := v.VisitPre(n); rec {
 		n.start.Walk(v)
-		n.end.Walk(v)
+		if n.end != nil {
+			n.end.Walk(v)
+		}
 		v.VisitPost(n)
 	}
 }

@@ -423,7 +423,7 @@ func identifierFollowingDotState(l *lexer) stateFn {
 }
 
 type tokenStream struct {
-	expr  jsonPathNode
+	expr  jsonPathExpr
 	items chan jsonpathSym
 	err   error
 	lexer *lexer
@@ -438,7 +438,7 @@ func (t *tokenStream) Lex(lval *yySymType) int {
 	case singleCh:
 		return n.ch
 	case number:
-		lval.val = NumberExpr{val: n.val}
+		lval.expr = NumberExpr{val: n.val}
 	case ident:
 		lval.str = n.val
 	case str:

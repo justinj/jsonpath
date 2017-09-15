@@ -10,8 +10,10 @@ type jsonpathSymUnion struct {
 %}
 
 %union {
-  val jsonPathNode
+  expr jsonPathExpr
   vals []jsonPathNode
+  ranges []RangeSubscriptNode
+  rangeNode RangeSubscriptNode
   accessor accessor
   str string
 }
@@ -24,7 +26,8 @@ type jsonpathSymUnion struct {
 %token <val> GTE
 %token <str> IDENT IS
 %token <val> LAST LAX LTE LIKE_REGEX
-%token <val> NEQ NUMBER NULL
+%token <val> NEQ
+%token <expr> NUMBER NULL
 %token <val> OR
 %token <str> STR
 %token <val> STRICT STARTS
@@ -33,32 +36,32 @@ type jsonpathSymUnion struct {
 %token <val> WITH
 %token <val> EOF
 
-%type <val> root
-%type <val> expr
-%type <val> primary
-%type <val> variable
-%type <val> literal
-%type <val> accessor_expr
+%type <expr> root
+%type <expr> expr
+%type <expr> primary
+%type <expr> variable
+%type <expr> literal
+%type <expr> accessor_expr
 %type <accessor> accessor
 %type <accessor> member_accessor
 %type <accessor> member_accessor_wildcard
 %type <accessor> array_accessor
-%type <vals> subscript_list
-%type <val> subscript
+%type <ranges> subscript_list
+%type <rangeNode> subscript
 %type <accessor> wildcard_array_accessor
 %type <accessor> item_method
 %type <accessor> method
 %type <accessor> filter_expression
-%type <val> predicate_primary
-%type <val> delimited_predicate
-%type <val> non_delimited_predicate
-%type <val> comparison_pred
-%type <val> exists_pred
-%type <val> like_regex_pred
+%type <expr> predicate_primary
+%type <expr> delimited_predicate
+%type <expr> non_delimited_predicate
+%type <expr> comparison_pred
+%type <expr> exists_pred
+%type <expr> like_regex_pred
 %type <str> like_regex_pattern
 %type <str> like_regex_flag
-%type <val> starts_with_pred
-%type <val> is_unknown_pred
+%type <expr> starts_with_pred
+%type <expr> is_unknown_pred
 
 %left OR
 %left AND
@@ -168,7 +171,7 @@ array_accessor:
 subscript_list:
         subscript
         {
-          $$ = []jsonPathNode{$1}
+          $$ = []RangeSubscriptNode{$1}
         }
         | subscript_list ',' subscript
         {
@@ -177,9 +180,12 @@ subscript_list:
 
 subscript:
      expr
+    {
+      $$ = RangeSubscriptNode{start: $1, end: nil}
+    }
     | expr TO expr
     {
-      $$ = RangeNode{start: $1, end: $3}
+      $$ = RangeSubscriptNode{start: $1, end: $3}
     }
 
 /* 6.10.4 */

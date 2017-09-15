@@ -4,7 +4,7 @@ import "fmt"
 
 // This implementation of eval uses Go's builtin encoding/decoding of json.
 type NaiveEvaler struct {
-	program jsonPathNode
+	program jsonPathExpr
 }
 
 type naiveEvalContext struct {
@@ -133,7 +133,7 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 	for _, e := range val {
 		if ary, ok := e.([]interface{}); ok {
 			for _, s := range n.subscripts {
-				index, err := s.naiveEval(ctx)
+				index, err := s.start.naiveEval(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -154,7 +154,7 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 	return result, nil
 }
 
-func (n RangeNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
+func (n RangeSubscriptNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
 	return nil, nil
 }
 
