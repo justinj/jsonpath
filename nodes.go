@@ -57,7 +57,7 @@ const (
 
 type UnaryExpr struct {
 	t    unaryExprType
-	expr jsonPathNode
+	expr jsonPathExpr
 }
 
 type ParenExpr struct {

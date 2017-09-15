@@ -1,15 +1,27 @@
 package jsonpath
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"strconv"
+)
 
 // This implementation of eval uses Go's builtin encoding/decoding of json.
 type NaiveEvaler struct {
 	program jsonPathExpr
 }
 
+type evalMode int
+
+const (
+	laxMode evalMode = iota
+	strictMode
+)
+
 type naiveEvalContext struct {
 	dollar                 jsonValue
 	containingArrayLengths []float64
+	mode                   evalMode
 }
 
 type jsonValue interface{}
@@ -19,6 +31,7 @@ func (n NaiveEvaler) Run(dollar jsonValue) (jsonSequence, error) {
 	return n.program.naiveEval(&naiveEvalContext{
 		dollar:                 dollar,
 		containingArrayLengths: make([]float64, 0, 10),
+		mode: laxMode,
 	})
 }
 
@@ -37,10 +50,16 @@ func (n BinExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(leftVal) != 1 {
+		return nil, fmt.Errorf("binary operators can only operate on single values")
+	}
 	left := leftVal[0]
 	rightVal, err := n.right.naiveEval(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if len(leftVal) != 1 {
+		return nil, fmt.Errorf("binary operators can only operate on single values")
 	}
 	right := rightVal[0]
 	if l, ok := left.(float64); ok {
@@ -63,11 +82,34 @@ func (n BinExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 }
 
 func (n NumberExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return []jsonValue{n.val}, nil
+	return jsonSequence{n.val}, nil
 }
 
-func (n UnaryExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
+func (n UnaryExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
+	expr, err := n.expr.naiveEval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	switch n.t {
+	case uminus:
+		result := make(jsonSequence, len(expr))
+		for i, e := range expr {
+			if num, ok := e.(float64); ok {
+				result[i] = -num
+			} else {
+				return nil, fmt.Errorf("unary minus can only accept numbers")
+			}
+		}
+		return result, nil
+	case uplus:
+		for _, e := range expr {
+			if _, ok := e.(float64); !ok {
+				return nil, fmt.Errorf("unary plus can only accept numbers")
+			}
+		}
+		return expr, nil
+	}
+	return nil, fmt.Errorf("unknown unary op")
 }
 
 func (n ParenExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
@@ -102,12 +144,8 @@ func (n AccessExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 	return n.right.naiveAccess(ctx, left)
 }
 
-func (n DotAccessor) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
-}
-
 func (n DotAccessor) naiveAccess(ctx *naiveEvalContext, node jsonSequence) (jsonSequence, error) {
-	result := make(jsonSequence, len(node), len(node))
+	result := make(jsonSequence, len(node))
 	for i, e := range node {
 		if obj, ok := e.(map[string]interface{}); ok {
 			result[i] = obj[n.val]
@@ -129,10 +167,6 @@ func (n MemberWildcardAccessor) naiveAccess(ctx *naiveEvalContext, s jsonSequenc
 		}
 	}
 	return result, nil
-}
-
-func (n ArrayAccessor) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
 }
 
 func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
@@ -169,8 +203,8 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 						}
 						j := end[0]
 						if idxEnd, ok := j.(float64); ok {
-							if idxEnd < idx {
-								return nil, fmt.Errorf("the end of a range must be greater than the beginning")
+							if idxEnd < idx && ctx.mode == strictMode {
+								return nil, fmt.Errorf("the end of a range can't come before the beginning")
 							}
 							for i := idx; i <= idxEnd; i++ {
 								if int(i) < 0 || int(i) >= len(ary) {
@@ -193,10 +227,6 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 	return result, nil
 }
 
-func (n RangeSubscriptNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
-}
-
 func (n WildcardArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
 	// TODO: handle lax vs. strict mode here
 	result := make(jsonSequence, 0, len(val))
@@ -213,12 +243,105 @@ func (n WildcardArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequen
 	return result, nil
 }
 
-func (n FuncNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
-}
-
-func (n FuncNode) naiveAccess(_ *naiveEvalContext, _ jsonSequence) (jsonSequence, error) {
-	return nil, nil
+func (n FuncNode) naiveAccess(_ *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
+	switch n.f {
+	case typeFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			switch e.(type) {
+			case nil:
+				result[i] = "null"
+			case bool:
+				result[i] = "boolean"
+			case float64:
+				result[i] = "number"
+			case string:
+				result[i] = "string"
+			case []interface{}:
+				result[i] = "array"
+			case map[string]interface{}:
+				result[i] = "object"
+			default:
+				return nil, fmt.Errorf("unknown elem type %T", e)
+			}
+		}
+		return result, nil
+	case sizeFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			if ary, ok := e.([]interface{}); ok {
+				result[i] = len(ary)
+			} else {
+				result[i] = 1
+			}
+		}
+		return result, nil
+	case doubleFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			switch t := e.(type) {
+			case float64:
+				result[i] = t
+			case string:
+				n, err := strconv.Atoi(t)
+				if err != nil {
+					return nil, err
+				}
+				result[i] = n
+			default:
+				return nil, fmt.Errorf(".double() only defined on strings and numbers")
+			}
+		}
+		return result, nil
+	case ceilingFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			if num, ok := e.(float64); ok {
+				result[i] = math.Ceil(num)
+			} else {
+				return nil, fmt.Errorf(".ceiling() only defined on numbers")
+			}
+		}
+		return result, nil
+	case floorFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			if num, ok := e.(float64); ok {
+				result[i] = math.Floor(num)
+			} else {
+				return nil, fmt.Errorf(".floor() only defined on numbers")
+			}
+		}
+		return result, nil
+	case absFunction:
+		result := make(jsonSequence, len(val))
+		for i, e := range val {
+			if num, ok := e.(float64); ok {
+				result[i] = math.Abs(num)
+			} else {
+				return nil, fmt.Errorf(".abs() only defined on numbers")
+			}
+		}
+		return result, nil
+	case keyvalueFunction:
+		result := make(jsonSequence, 0)
+		for i, e := range val {
+			if obj, ok := e.(map[string]interface{}); ok {
+				for k, v := range obj {
+					result = append(result, map[string]interface{}{
+						"name":  k,
+						"value": v,
+						"id":    i,
+					})
+				}
+			} else {
+				// TODO: lax mode unwraps arrays
+				return nil, fmt.Errorf(".keyvalue() only on objects")
+			}
+		}
+		return result, nil
+	}
+	return nil, fmt.Errorf("unimplemented function")
 }
 
 func (n FilterNode) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
