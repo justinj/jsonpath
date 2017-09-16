@@ -13,7 +13,37 @@ func (n BinExpr) Walk(v visitor) {
 	}
 }
 
+func (n BinPred) Walk(v visitor) {
+	if rec := v.VisitPre(n); rec {
+		n.left.Walk(v)
+		n.right.Walk(v)
+		v.VisitPost(n)
+	}
+}
+
+func (n BinLogic) Walk(v visitor) {
+	if rec := v.VisitPre(n); rec {
+		n.left.Walk(v)
+		n.right.Walk(v)
+		v.VisitPost(n)
+	}
+}
+
 func (n UnaryExpr) Walk(v visitor) {
+	if rec := v.VisitPre(n); rec {
+		n.expr.Walk(v)
+		v.VisitPost(n)
+	}
+}
+
+func (n UnaryNot) Walk(v visitor) {
+	if rec := v.VisitPre(n); rec {
+		n.expr.Walk(v)
+		v.VisitPost(n)
+	}
+}
+
+func (n ParenPred) Walk(v visitor) {
 	if rec := v.VisitPre(n); rec {
 		n.expr.Walk(v)
 		v.VisitPost(n)

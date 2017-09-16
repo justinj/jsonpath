@@ -29,16 +29,21 @@ func (s BinExpr) Format(b *bytes.Buffer) {
 		b.WriteByte('/')
 	case modBinOp:
 		b.WriteByte('%')
+	}
+	b.WriteByte(' ')
+	s.right.Format(b)
+}
+
+func (s BinPred) Format(b *bytes.Buffer) {
+	s.left.Format(b)
+	b.WriteByte(' ')
+	switch s.t {
 	case eqBinOp:
 		b.WriteString("==")
 	case neqBinOp:
 		b.WriteString("!=")
 	case ltBinOp:
 		b.WriteByte('<')
-	case andBinOp:
-		b.WriteString("&&")
-	case orBinOp:
-		b.WriteString("||")
 	case gtBinOp:
 		b.WriteByte('>')
 	case lteBinOp:
@@ -50,16 +55,38 @@ func (s BinExpr) Format(b *bytes.Buffer) {
 	s.right.Format(b)
 }
 
+func (s BinLogic) Format(b *bytes.Buffer) {
+	s.left.Format(b)
+	b.WriteByte(' ')
+	switch s.t {
+	case orBinOp:
+		b.WriteString("||")
+	case andBinOp:
+		b.WriteString("&&")
+	}
+	b.WriteByte(' ')
+	s.right.Format(b)
+}
+
 func (s UnaryExpr) Format(b *bytes.Buffer) {
 	switch s.t {
 	case uminus:
 		b.WriteByte('-')
 	case uplus:
 		b.WriteByte('+')
-	case unot:
-		b.WriteByte('!')
 	}
 	s.expr.Format(b)
+}
+
+func (s UnaryNot) Format(b *bytes.Buffer) {
+	b.WriteByte('!')
+	s.expr.Format(b)
+}
+
+func (s ParenPred) Format(b *bytes.Buffer) {
+	b.WriteByte('(')
+	s.expr.Format(b)
+	b.WriteByte(')')
 }
 
 func (s ParenExpr) Format(b *bytes.Buffer) {
@@ -171,7 +198,7 @@ func (s ExistsNode) Format(b *bytes.Buffer) {
 func (s LikeRegexNode) Format(b *bytes.Buffer) {
 	s.left.Format(b)
 	b.WriteString(" like_regex ")
-	b.WriteString(fmt.Sprintf("%#v", s.pattern))
+	b.WriteString(fmt.Sprintf("%#v", s.rawPattern))
 	if s.flag != nil {
 		b.WriteString(" flag ")
 		b.WriteString(fmt.Sprintf("%#v", *s.flag))

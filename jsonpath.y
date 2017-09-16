@@ -1,7 +1,10 @@
 %{
 package jsonpath
 
-import "fmt"
+import (
+  "fmt"
+  "regexp"
+)
 
 type jsonpathSymUnion struct {
   val interface{}
@@ -11,7 +14,9 @@ type jsonpathSymUnion struct {
 
 %union {
   expr jsonPathExpr
+  pred jsonPathPred
   vals []jsonPathNode
+  regexp *regexp.Regexp
   ranges []RangeSubscriptNode
   rangeNode RangeSubscriptNode
   accessor accessor
@@ -52,16 +57,16 @@ type jsonpathSymUnion struct {
 %type <accessor> item_method
 %type <accessor> method
 %type <accessor> filter_expression
-%type <expr> predicate_primary
-%type <expr> delimited_predicate
-%type <expr> non_delimited_predicate
-%type <expr> comparison_pred
-%type <expr> exists_pred
-%type <expr> like_regex_pred
+%type <pred> predicate_primary
+%type <pred> delimited_predicate
+%type <pred> non_delimited_predicate
+%type <pred> comparison_pred
+%type <pred> exists_pred
+%type <pred> like_regex_pred
 %type <str> like_regex_pattern
 %type <str> like_regex_flag
-%type <expr> starts_with_pred
-%type <expr> is_unknown_pred
+%type <pred> starts_with_pred
+%type <pred> is_unknown_pred
 
 %left OR
 %left AND
@@ -234,7 +239,7 @@ delimited_predicate:
   exists_pred
   | '(' predicate_primary ')'
   {
-    $$ = ParenExpr{$2}
+    $$ = ParenPred{$2}
   }
 
 non_delimited_predicate:
@@ -252,52 +257,63 @@ exists_pred:
 comparison_pred:
     expr EQ expr
     {
-      $$ = BinExpr{t: eqBinOp, left: $1, right: $3}
+      $$ = BinPred{t: eqBinOp, left: $1, right: $3}
     }
     | expr NEQ expr
     {
-      $$ = BinExpr{t: neqBinOp, left: $1, right: $3}
+      $$ = BinPred{t: neqBinOp, left: $1, right: $3}
     }
     | expr '>' expr
     {
-      $$ = BinExpr{t: gtBinOp, left: $1, right: $3}
+      $$ = BinPred{t: gtBinOp, left: $1, right: $3}
     }
     | expr '<' expr
     {
-      $$ = BinExpr{t: ltBinOp, left: $1, right: $3}
+      $$ = BinPred{t: ltBinOp, left: $1, right: $3}
     }
     | expr GTE expr
     {
-      $$ = BinExpr{t: gteBinOp, left: $1, right: $3}
+      $$ = BinPred{t: gteBinOp, left: $1, right: $3}
     }
     | expr LTE expr
     {
-      $$ = BinExpr{t: lteBinOp, left: $1, right: $3}
+      $$ = BinPred{t: lteBinOp, left: $1, right: $3}
     }
     | predicate_primary AND predicate_primary
     {
-      $$ = BinExpr{t: andBinOp, left: $1, right: $3}
+      $$ = BinLogic{t: andBinOp, left: $1, right: $3}
     }
     | predicate_primary OR predicate_primary
     {
-      $$ = BinExpr{t: orBinOp, left: $1, right: $3}
+      $$ = BinLogic{t: orBinOp, left: $1, right: $3}
     }
     | UNOT predicate_primary %prec UMINUS
     {
-      $$ = UnaryExpr{t: unot, expr: $2}
+      $$ = UnaryNot{expr: $2}
     }
 
 like_regex_pred:
   expr LIKE_REGEX like_regex_pattern FLAG like_regex_flag
   {
-    $$ = LikeRegexNode{left: $1, pattern: $3, flag: &$5}
+    pattern, err := regexp.Compile($3)
+    if err != nil {
+      yylex.(*tokenStream).err = err
+      return 1
+    }
+    $$ = LikeRegexNode{left: $1, rawPattern: $3, pattern: pattern, flag: &$5}
   }
   | expr LIKE_REGEX like_regex_pattern
   {
-    $$ = LikeRegexNode{left: $1, pattern: $3}
+    pattern, err := regexp.Compile($3)
+    if err != nil {
+      yylex.(*tokenStream).err = err
+      return 1
+    }
+    $$ = LikeRegexNode{left: $1, pattern: pattern, rawPattern: $3}
   }
 
-like_regex_pattern: STR
+like_regex_pattern:
+  STR
 
 like_regex_flag: STR
 

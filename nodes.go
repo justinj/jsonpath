@@ -2,6 +2,7 @@ package jsonpath
 
 import (
 	"bytes"
+	"regexp"
 )
 
 type jsonPathNode interface {
@@ -14,6 +15,21 @@ type jsonPathExpr interface {
 	Walk(visitor)
 
 	naiveEval(*naiveEvalContext) (jsonSequence, error)
+}
+
+type sqlJsonBool int
+
+const (
+	sqlJsonFalse sqlJsonBool = iota
+	sqlJsonTrue
+	sqlJsonUnknown
+)
+
+type jsonPathPred interface {
+	Format(*bytes.Buffer)
+	Walk(visitor)
+
+	naivePredEval(*naiveEvalContext) (sqlJsonBool, error)
 }
 
 type accessor interface {
@@ -31,14 +47,6 @@ const (
 	timesBinOp
 	divBinOp
 	modBinOp
-	eqBinOp
-	neqBinOp
-	andBinOp
-	orBinOp
-	gtBinOp
-	gteBinOp
-	ltBinOp
-	lteBinOp
 )
 
 type BinExpr struct {
@@ -47,12 +55,41 @@ type BinExpr struct {
 	right jsonPathExpr
 }
 
+type binPredType int
+
+const (
+	eqBinOp binPredType = iota
+	neqBinOp
+	gtBinOp
+	gteBinOp
+	ltBinOp
+	lteBinOp
+)
+
+type BinPred struct {
+	t     binPredType
+	left  jsonPathExpr
+	right jsonPathExpr
+}
+
+type binLogicType int
+
+const (
+	andBinOp binLogicType = iota
+	orBinOp
+)
+
+type BinLogic struct {
+	t     binLogicType
+	left  jsonPathPred
+	right jsonPathPred
+}
+
 type unaryExprType int
 
 const (
 	uminus unaryExprType = iota
 	uplus
-	unot
 )
 
 type UnaryExpr struct {
@@ -60,8 +97,16 @@ type UnaryExpr struct {
 	expr jsonPathExpr
 }
 
+type UnaryNot struct {
+	expr jsonPathPred
+}
+
 type ParenExpr struct {
 	expr jsonPathNode
+}
+
+type ParenPred struct {
+	expr jsonPathPred
 }
 
 type NumberExpr struct {
@@ -120,7 +165,7 @@ type FuncNode struct {
 }
 
 type FilterNode struct {
-	pred jsonPathNode
+	pred jsonPathPred
 }
 
 type ExistsNode struct {
@@ -128,9 +173,10 @@ type ExistsNode struct {
 }
 
 type LikeRegexNode struct {
-	left    jsonPathNode
-	pattern string
-	flag    *string
+	left       jsonPathExpr
+	rawPattern string
+	pattern    *regexp.Regexp
+	flag       *string
 }
 
 type StartsWithNode struct {
