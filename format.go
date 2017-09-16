@@ -212,6 +212,8 @@ func (s StartsWithNode) Format(b *bytes.Buffer) {
 }
 
 func (s IsUnknownNode) Format(b *bytes.Buffer) {
+	b.WriteByte('(')
 	s.expr.Format(b)
+	b.WriteByte(')')
 	b.WriteString(" is unknown")
 }

@@ -324,9 +324,9 @@ starts_with_pred:
   }
 
 is_unknown_pred:
-  expr IS UNKNOWN
+  '(' predicate_primary ')' IS UNKNOWN
   {
-    $$ = IsUnknownNode{expr: $1}
+    $$ = IsUnknownNode{expr: $2}
   }
 
 %%

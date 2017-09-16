@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // This implementation of eval uses Go's builtin encoding/decoding of json.
@@ -46,20 +47,53 @@ func NewNaiveEvaler(program string) (*NaiveEvaler, error) {
 	}, nil
 }
 
+func comparable(x interface{}, y interface{}) bool {
+	if _, ok := x.(map[string]interface{}); ok {
+		return false
+	}
+	if _, ok := y.(map[string]interface{}); ok {
+		return false
+	}
+	if _, ok := x.([]interface{}); ok {
+		return false
+	}
+	if _, ok := y.([]interface{}); ok {
+		return false
+	}
+	if x == nil || y == nil {
+		return true
+	}
+	switch x.(type) {
+	case string:
+		_, ok := y.(string)
+		return ok
+	case float64:
+		_, ok := y.(float64)
+		return ok
+	case bool:
+		_, ok := y.(bool)
+		return ok
+	}
+	return false
+}
+
 func (n BinPred) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
 	leftVal, err := n.left.naiveEval(ctx)
 	if err != nil {
-		return 0, err
+		return sqlJsonUnknown, nil
 	}
 	rightVal, err := n.right.naiveEval(ctx)
 	if err != nil {
-		return 0, err
+		return sqlJsonUnknown, nil
 	}
 	//TODO strict vs. lax semantics are different here
 	switch n.t {
 	case eqBinOp:
 		for _, l := range leftVal {
 			for _, r := range rightVal {
+				if !comparable(l, r) {
+					return sqlJsonUnknown, nil
+				}
 				if l == r {
 					return sqlJsonTrue, nil
 				}
@@ -175,12 +209,12 @@ func (n UnaryNot) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
 	return sqlJsonUnknown, nil
 }
 
-func (n ParenPred) naivePredEval(_ *naiveEvalContext) (sqlJsonBool, error) {
-	return 0, nil
+func (n ParenPred) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
+	return n.expr.naivePredEval(ctx)
 }
 
-func (n ParenExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
+func (n ParenExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
+	return n.expr.naiveEval(ctx)
 }
 
 func (n VariableExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
@@ -202,7 +236,7 @@ func (n BoolExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
 }
 
 func (n NullExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
-	return nil, nil
+	return jsonSequence{nil}, nil
 }
 
 func (n StringExpr) naiveEval(_ *naiveEvalContext) (jsonSequence, error) {
@@ -435,8 +469,15 @@ func (n FilterNode) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jsonSe
 	return result, nil
 }
 
-func (n ExistsNode) naivePredEval(_ *naiveEvalContext) (sqlJsonBool, error) {
-	return 0, nil
+func (n ExistsNode) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
+	e, err := n.expr.naiveEval(ctx)
+	if err != nil {
+		return sqlJsonUnknown, nil
+	}
+	if len(e) > 0 {
+		return sqlJsonTrue, nil
+	}
+	return sqlJsonFalse, nil
 }
 
 func (n LikeRegexNode) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
@@ -454,10 +495,40 @@ func (n LikeRegexNode) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error)
 	return sqlJsonFalse, nil
 }
 
-func (n StartsWithNode) naivePredEval(_ *naiveEvalContext) (sqlJsonBool, error) {
-	return 0, nil
+func (n StartsWithNode) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
+	left, err := n.left.naiveEval(ctx)
+	if err != nil {
+		return 0, err
+	}
+	right, err := n.right.naiveEval(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, l := range left {
+		for _, r := range right {
+			if sl, ok := l.(string); ok {
+				if sr, ok := r.(string); ok {
+					if strings.HasPrefix(sl, sr) {
+						return sqlJsonTrue, nil
+					}
+				} else {
+					return sqlJsonUnknown, nil
+				}
+			} else {
+				return sqlJsonUnknown, nil
+			}
+		}
+	}
+	return sqlJsonFalse, nil
 }
 
-func (n IsUnknownNode) naivePredEval(_ *naiveEvalContext) (sqlJsonBool, error) {
-	return 0, nil
+func (n IsUnknownNode) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
+	e, err := n.expr.naivePredEval(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if e == sqlJsonUnknown {
+		return sqlJsonTrue, nil
+	}
+	return sqlJsonFalse, nil
 }

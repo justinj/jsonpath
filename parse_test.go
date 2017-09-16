@@ -102,10 +102,9 @@ func TestParse(t *testing.T) {
 		"$ ? (\"foo\" like_regex \"bar\")",
 		"$ ? (\"foo\" like_regex \"bar\" flag \"i\")",
 		"$ ? (\"foo\" starts with \"fo\")",
-		"$ ? (\"foo\" is unknown)",
+		"$ ? ((1 == 1) is unknown)",
 
-		"$ ? (!\"foo\" is unknown)",
-		// ^^^ should this be allowed?
+		"$ ? (!(1 == 1) is unknown)",
 	}
 
 	for _, tc := range testCases {
@@ -128,8 +127,8 @@ func TestParseError(t *testing.T) {
 	}{
 		{"(", "syntax error: unexpected $end"},
 		{"@.foo", "@ only allowed within filter expressions"},
-		{"$ ? (@.foo is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
-		{"@.foo + $ ? (@.foo is unknown)[*]", "@ only allowed within filter expressions"},
+		{"$ ? ((@.foo == 1) is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
+		{"@.foo + $ ? ((@.foo == 1) is unknown)[*]", "@ only allowed within filter expressions"},
 		{"$ ? (@.foo)", "filter expressions cannot be raw json values - if you expect `@.foo` to be boolean true, write `@.foo == true`"},
 		{"last", "`last` can only appear inside an array subscript"},
 	}

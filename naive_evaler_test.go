@@ -83,9 +83,23 @@ func TestNaiveEval(t *testing.T) {
 		{"$[*] ? (@ == 2)", `[1, 2, 3]`, []string{`2`}},
 		{"$[*] ? (@ == \"foo\")", `["foo", "bar"]`, []string{`"foo"`}},
 		{"1 ? ($[*][0] == $[*][1])", `[[1, 2], [2, 3]]`, []string{`1`}},
+		{"1 ? (null == null)", `{}`, []string{"1"}},
 
 		// 6.13.6
 		{"$[*] ? (@ like_regex 'foo')", `["foo", "bar", "afoob"]`, []string{"\"foo\"", "\"afoob\""}},
+
+		// 6.13.7
+		{"$[*] ? (@ starts with 'foo')", `["foo", "bar", "afoob"]`, []string{"\"foo\""}},
+
+		// 6.13.8
+		{"true ? (exists ($.foo))", `{"foo": 1}`, []string{"true"}},
+		{"true ? (exists ($.foo))", `{"bar": 1}`, []string{}},
+
+		// 6.13.9
+		{"true ? ((1 == 'one') is unknown)", `{}`, []string{"true"}},
+		{"true ? (((1) == 'one') is unknown)", `{}`, []string{"true"}},
+		{"true ? (((1 == 'one') is unknown))", `{}`, []string{"true"}},
+		{"true ? ((1 == 1) is unknown)", `{}`, []string{}},
 
 		// ?
 		// {"1 ? ($[0] == $[1])", `[[1, 2], [2, 3]]`, []string{`1`}},

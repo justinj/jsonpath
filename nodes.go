@@ -102,7 +102,7 @@ type UnaryNot struct {
 }
 
 type ParenExpr struct {
-	expr jsonPathNode
+	expr jsonPathExpr
 }
 
 type ParenPred struct {
@@ -169,7 +169,7 @@ type FilterNode struct {
 }
 
 type ExistsNode struct {
-	expr jsonPathNode
+	expr jsonPathExpr
 }
 
 type LikeRegexNode struct {
@@ -180,10 +180,10 @@ type LikeRegexNode struct {
 }
 
 type StartsWithNode struct {
-	left  jsonPathNode
-	right jsonPathNode
+	left  jsonPathExpr
+	right jsonPathExpr
 }
 
 type IsUnknownNode struct {
-	expr jsonPathNode
+	expr jsonPathPred
 }
