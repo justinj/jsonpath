@@ -79,9 +79,19 @@ type jsonpathSymUnion struct {
 %%
 
 root:
-    expr
+    LAX expr
     {
-      yylex.(*tokenStream).expr = $1
+      yylex.(*tokenStream).root = Program{
+        mode: modeLax,
+        root: $2,
+      }
+    }
+    | STRICT expr
+    {
+      yylex.(*tokenStream).root = Program{
+        mode: modeStrict,
+        root: $2,
+      }
     }
 
 expr:

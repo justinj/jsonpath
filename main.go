@@ -11,10 +11,10 @@ func Parse(input string) (jsonPathExpr, error) {
 	}
 
 	validator := &validationVisitor{}
-	tok.expr.Walk(validator)
+	tok.root.Walk(validator)
 	if validator.err != nil {
 		return nil, validator.err
 	}
 
-	return tok.expr, nil
+	return tok.root, nil
 }

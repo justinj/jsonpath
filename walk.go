@@ -5,6 +5,13 @@ type visitor interface {
 	VisitPost(jsonPathNode)
 }
 
+func (n Program) Walk(v visitor) {
+	if rec := v.VisitPre(n); rec {
+		n.root.Walk(v)
+		v.VisitPost(n)
+	}
+}
+
 func (n BinExpr) Walk(v visitor) {
 	if rec := v.VisitPre(n); rec {
 		n.left.Walk(v)

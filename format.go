@@ -11,6 +11,16 @@ func FormatNode(n jsonPathNode) string {
 	return b.String()
 }
 
+func (s Program) Format(b *bytes.Buffer) {
+	if s.mode == modeLax {
+		b.WriteString("lax ")
+	}
+	if s.mode == modeStrict {
+		b.WriteString("strict ")
+	}
+	s.root.Format(b)
+}
+
 func (s NumberExpr) Format(b *bytes.Buffer) {
 	b.WriteString(fmt.Sprintf("%v", s.val))
 }

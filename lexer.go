@@ -422,8 +422,16 @@ func identifierFollowingDotState(l *lexer) stateFn {
 	return startState
 }
 
+type executionMode int
+
+const (
+	modeLax executionMode = iota
+	modeStrict
+)
+
 type tokenStream struct {
-	expr  jsonPathExpr
+	root  Program
+	mode  executionMode
 	items chan jsonpathSym
 	err   error
 	lexer *lexer

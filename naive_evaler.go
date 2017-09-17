@@ -1,6 +1,7 @@
 package jsonpath
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -12,18 +13,11 @@ type NaiveEvaler struct {
 	program jsonPathExpr
 }
 
-type evalMode int
-
-const (
-	laxMode evalMode = iota
-	strictMode
-)
-
 type naiveEvalContext struct {
 	dollar                 jsonValue
 	containingArrayLengths []float64
 	atSigns                []jsonValue
-	mode                   evalMode
+	mode                   executionMode
 }
 
 type jsonValue interface{}
@@ -33,7 +27,7 @@ func (n NaiveEvaler) Run(dollar jsonValue) (jsonSequence, error) {
 	return n.program.naiveEval(&naiveEvalContext{
 		dollar:                 dollar,
 		containingArrayLengths: make([]float64, 0, 10),
-		mode: laxMode,
+		mode: modeLax,
 	})
 }
 
@@ -47,34 +41,98 @@ func NewNaiveEvaler(program string) (*NaiveEvaler, error) {
 	}, nil
 }
 
-func comparable(x interface{}, y interface{}) bool {
+func (p Program) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
+	ctx.mode = p.mode
+	return p.root.naiveEval(ctx)
+}
+
+type cmpResult int
+
+const (
+	ltResult cmpResult = 1 << iota
+	eqResult
+	gtResult
+	unknownResult
+)
+
+func compare(x interface{}, y interface{}) cmpResult {
 	if _, ok := x.(map[string]interface{}); ok {
-		return false
+		return unknownResult
 	}
 	if _, ok := y.(map[string]interface{}); ok {
-		return false
+		return unknownResult
 	}
 	if _, ok := x.([]interface{}); ok {
-		return false
+		return unknownResult
 	}
 	if _, ok := y.([]interface{}); ok {
-		return false
+		return unknownResult
 	}
 	if x == nil || y == nil {
-		return true
+		return eqResult
 	}
-	switch x.(type) {
+	switch xx := x.(type) {
 	case string:
-		_, ok := y.(string)
-		return ok
+		yy, ok := y.(string)
+		if !ok {
+			return unknownResult
+		}
+		cmp := strings.Compare(xx, yy)
+		switch cmp {
+		case -1:
+			return ltResult
+		case 0:
+			return eqResult
+		case 2:
+			return gtResult
+		}
 	case float64:
-		_, ok := y.(float64)
-		return ok
+		yy, ok := y.(float64)
+		if !ok {
+			return unknownResult
+		}
+		switch {
+		case xx < yy:
+			return ltResult
+		case xx == yy:
+			return eqResult
+		case xx > yy:
+			return gtResult
+		}
 	case bool:
-		_, ok := y.(bool)
-		return ok
+		yy, ok := y.(bool)
+		if !ok {
+			return unknownResult
+		}
+		if xx == yy {
+			return eqResult
+		}
+		if xx == false {
+			return ltResult
+		}
+		return gtResult
 	}
-	return false
+	return -1
+}
+
+func performCmp(leftVal, rightVal jsonSequence, acceptedResult cmpResult) sqlJsonBool {
+	seenTrue := false
+	for _, l := range leftVal {
+		for _, r := range rightVal {
+			result := compare(l, r)
+
+			if result == unknownResult {
+				return sqlJsonUnknown
+			}
+			if (result & acceptedResult) != 0 {
+				seenTrue = true
+			}
+		}
+	}
+	if seenTrue {
+		return sqlJsonTrue
+	}
+	return sqlJsonFalse
 }
 
 func (n BinPred) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
@@ -86,20 +144,19 @@ func (n BinPred) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
 	if err != nil {
 		return sqlJsonUnknown, nil
 	}
-	//TODO strict vs. lax semantics are different here
 	switch n.t {
 	case eqBinOp:
-		for _, l := range leftVal {
-			for _, r := range rightVal {
-				if !comparable(l, r) {
-					return sqlJsonUnknown, nil
-				}
-				if l == r {
-					return sqlJsonTrue, nil
-				}
-			}
-		}
-		return sqlJsonFalse, nil
+		return performCmp(leftVal, rightVal, eqResult), nil
+	case ltBinOp:
+		return performCmp(leftVal, rightVal, ltResult), nil
+	case lteBinOp:
+		return performCmp(leftVal, rightVal, eqResult|ltResult), nil
+	case gtBinOp:
+		return performCmp(leftVal, rightVal, gtResult), nil
+	case gteBinOp:
+		return performCmp(leftVal, rightVal, eqResult|gtResult), nil
+	case neqBinOp:
+		return performCmp(leftVal, rightVal, ltResult|gtResult), nil
 	}
 	return 0, fmt.Errorf("unknown op")
 }
@@ -115,15 +172,27 @@ func (n BinLogic) naivePredEval(ctx *naiveEvalContext) (sqlJsonBool, error) {
 	}
 	switch n.t {
 	case orBinOp:
-		if left == sqlJsonTrue || right == sqlJsonTrue {
+		if left == sqlJsonFalse {
+			return right, nil
+		}
+		if left == sqlJsonTrue {
 			return sqlJsonTrue, nil
 		}
-		return sqlJsonFalse, nil
+		if right == sqlJsonTrue {
+			return sqlJsonTrue, nil
+		}
+		return sqlJsonUnknown, nil
 	case andBinOp:
-		if left == sqlJsonTrue && right == sqlJsonTrue {
-			return sqlJsonTrue, nil
+		if left == sqlJsonTrue {
+			return right, nil
 		}
-		return sqlJsonFalse, nil
+		if left == sqlJsonFalse {
+			return sqlJsonFalse, nil
+		}
+		if right == sqlJsonFalse {
+			return sqlJsonFalse, nil
+		}
+		return sqlJsonUnknown, nil
 	}
 	return 0, fmt.Errorf("unknown op")
 }
@@ -175,22 +244,35 @@ func (n UnaryExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 	}
 	switch n.t {
 	case uminus:
-		result := make(jsonSequence, len(expr))
-		for i, e := range expr {
-			if num, ok := e.(float64); ok {
-				result[i] = -num
-			} else {
-				return nil, fmt.Errorf("unary minus can only accept numbers")
+		result := make(jsonSequence, 0, len(expr))
+		for _, e := range expr {
+			if err := iter(ctx, e, func(e interface{}) error {
+				if num, ok := e.(float64); ok {
+					result = append(result, -num)
+				} else {
+					return fmt.Errorf("unary minus can only accept numbers")
+				}
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 		}
 		return result, nil
 	case uplus:
+		result := make(jsonSequence, 0, len(expr))
 		for _, e := range expr {
-			if _, ok := e.(float64); !ok {
-				return nil, fmt.Errorf("unary plus can only accept numbers")
+			if err := iter(ctx, e, func(e interface{}) error {
+				if num, ok := e.(float64); ok {
+					result = append(result, num)
+				} else {
+					return fmt.Errorf("unary plus can only accept numbers")
+				}
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 		}
-		return expr, nil
+		return result, nil
 	}
 	return nil, fmt.Errorf("unknown unary op")
 }
@@ -254,10 +336,27 @@ func (n AccessExpr) naiveEval(ctx *naiveEvalContext) (jsonSequence, error) {
 func (n DotAccessor) naiveAccess(ctx *naiveEvalContext, node jsonSequence) (jsonSequence, error) {
 	result := make(jsonSequence, 0, len(node))
 	for _, e := range node {
-		if obj, ok := e.(map[string]interface{}); ok {
-			if v, ok := obj[n.val]; ok {
-				result = append(result, v)
+		if err := iter(ctx, e, func(elem interface{}) error {
+			if obj, ok := elem.(map[string]interface{}); ok {
+				if v, ok := obj[n.val]; ok {
+					result = append(result, v)
+				} else if ctx.mode == modeStrict {
+					s, err := json.Marshal(obj)
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("object %s missing `%s` field", s, n.val)
+				}
+			} else {
+				s, err := json.Marshal(elem)
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("cannot access field `%s` on non-object %s", n.val, s)
 			}
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
 	return result, nil
@@ -267,12 +366,21 @@ func (n MemberWildcardAccessor) naiveAccess(ctx *naiveEvalContext, s jsonSequenc
 	// TODO: try to estimate size...
 	result := make(jsonSequence, 0)
 	for _, e := range s {
-		if obj, ok := e.(map[string]interface{}); ok {
-			for _, v := range obj {
-				result = append(result, v)
+		if err := iter(ctx, e, func(e interface{}) error {
+			if obj, ok := e.(map[string]interface{}); ok {
+				for _, v := range obj {
+					result = append(result, v)
+				}
+			} else if ctx.mode == modeStrict {
+				s, err := json.Marshal(e)
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("can't .* non-object %s", s)
 			}
-		} else {
-			return nil, fmt.Errorf("arguments to `.*` must be objects")
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
 	return result, nil
@@ -284,6 +392,17 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 	result := make(jsonSequence, 0, len(val))
 	ctx.containingArrayLengths = append(ctx.containingArrayLengths, 0)
 	for _, e := range val {
+		if _, ok := e.([]interface{}); !ok {
+			if ctx.mode == modeLax {
+				e = []interface{}{e}
+			} else {
+				s, err := json.Marshal(e)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("can't index non-array %s", s)
+			}
+		}
 		if ary, ok := e.([]interface{}); ok {
 			ctx.containingArrayLengths[len(ctx.containingArrayLengths)-1] = float64(len(ary) - 1)
 			for _, s := range n.subscripts {
@@ -299,9 +418,12 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 				if idx, ok := i.(float64); ok {
 					if s.end == nil {
 						if int(idx) < 0 || int(idx) >= len(ary) {
-							return nil, fmt.Errorf("array index %d out of bounds", int(idx))
+							if ctx.mode == modeStrict {
+								return nil, fmt.Errorf("array index %d out of bounds", int(idx))
+							}
+						} else {
+							result = append(result, ary[int(idx)])
 						}
-						result = append(result, ary[int(idx)])
 					} else {
 						end, err := s.end.naiveEval(ctx)
 						if err != nil {
@@ -312,14 +434,17 @@ func (n ArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jso
 						}
 						j := end[0]
 						if idxEnd, ok := j.(float64); ok {
-							if idxEnd < idx && ctx.mode == strictMode {
+							if idxEnd < idx && ctx.mode == modeStrict {
 								return nil, fmt.Errorf("the end of a range can't come before the beginning")
 							}
 							for i := idx; i <= idxEnd; i++ {
 								if int(i) < 0 || int(i) >= len(ary) {
-									return nil, fmt.Errorf("array index out of bounds")
+									if ctx.mode == modeStrict {
+										return nil, fmt.Errorf("array index out of bounds")
+									}
+								} else {
+									result = append(result, ary[int(i)])
 								}
-								result = append(result, ary[int(i)])
 							}
 						} else {
 							return nil, fmt.Errorf("array index must be a number, but found %#v", j)
@@ -352,7 +477,22 @@ func (n WildcardArrayAccessor) naiveAccess(ctx *naiveEvalContext, val jsonSequen
 	return result, nil
 }
 
-func (n FuncNode) naiveAccess(_ *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
+func iter(ctx *naiveEvalContext, e interface{}, f func(interface{}) error) error {
+	if ary, ok := e.([]interface{}); ok && ctx.mode == modeLax {
+		for _, elem := range ary {
+			if err := f(elem); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := f(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n FuncNode) naiveAccess(ctx *naiveEvalContext, val jsonSequence) (jsonSequence, error) {
 	switch n.f {
 	case typeFunction:
 		result := make(jsonSequence, len(val))
@@ -413,12 +553,17 @@ func (n FuncNode) naiveAccess(_ *naiveEvalContext, val jsonSequence) (jsonSequen
 		}
 		return result, nil
 	case floorFunction:
-		result := make(jsonSequence, len(val))
-		for i, e := range val {
-			if num, ok := e.(float64); ok {
-				result[i] = math.Floor(num)
-			} else {
-				return nil, fmt.Errorf(".floor() only defined on numbers")
+		result := make(jsonSequence, 0, len(val))
+		for _, e := range val {
+			if err := iter(ctx, e, func(e interface{}) error {
+				if num, ok := e.(float64); ok {
+					result = append(result, math.Floor(num))
+				} else {
+					return fmt.Errorf(".floor() only defined on numbers")
+				}
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 		}
 		return result, nil
@@ -434,18 +579,24 @@ func (n FuncNode) naiveAccess(_ *naiveEvalContext, val jsonSequence) (jsonSequen
 		return result, nil
 	case keyvalueFunction:
 		result := make(jsonSequence, 0)
-		for i, e := range val {
-			if obj, ok := e.(map[string]interface{}); ok {
-				for k, v := range obj {
-					result = append(result, map[string]interface{}{
-						"name":  k,
-						"value": v,
-						"id":    i,
-					})
+		i := 0
+		for _, e := range val {
+			if err := iter(ctx, e, func(e interface{}) error {
+				if obj, ok := e.(map[string]interface{}); ok {
+					for k, v := range obj {
+						result = append(result, map[string]interface{}{
+							"name":  k,
+							"value": v,
+							"id":    i,
+						})
+					}
+				} else {
+					return fmt.Errorf(".keyvalue() only defined on objects")
 				}
-			} else {
-				// TODO: lax mode unwraps arrays
-				return nil, fmt.Errorf(".keyvalue() only on objects")
+				i++
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 		}
 		return result, nil

@@ -39,6 +39,11 @@ type accessor interface {
 	naiveAccess(*naiveEvalContext, jsonSequence) (jsonSequence, error)
 }
 
+type Program struct {
+	mode executionMode
+	root jsonPathExpr
+}
+
 type binExprType int
 
 const (

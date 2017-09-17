@@ -12,19 +12,23 @@ type parseTestCase struct {
 
 func TestParseComplete(t *testing.T) {
 	testCases := []parseTestCase{
-		{"1", NumberExpr{val: 1}},
-		{"1+1*1",
-			BinExpr{
-				t:     plusBinOp,
-				left:  NumberExpr{val: 1},
-				right: BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
-			}},
-		{"1*1+1",
-			BinExpr{
-				t:     plusBinOp,
-				left:  BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
-				right: NumberExpr{val: 1},
-			}},
+		{"lax 1", Program{root: NumberExpr{val: 1}, mode: modeLax}},
+		{"lax 1+1*1",
+			Program{
+				mode: modeLax,
+				root: BinExpr{
+					t:     plusBinOp,
+					left:  NumberExpr{val: 1},
+					right: BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
+				}}},
+		{"lax 1*1+1",
+			Program{
+				mode: modeLax,
+				root: BinExpr{
+					t:     plusBinOp,
+					left:  BinExpr{t: timesBinOp, left: NumberExpr{val: 1}, right: NumberExpr{val: 1}},
+					right: NumberExpr{val: 1},
+				}}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -32,8 +36,8 @@ func TestParseComplete(t *testing.T) {
 			tok := tokens(tc.input)
 			parser.Parse(tok)
 
-			if !reflect.DeepEqual(tok.expr, tc.result) {
-				t.Errorf("expected `%#v`, got `%#v`", tc.result, tok.expr)
+			if !reflect.DeepEqual(tok.root, tc.result) {
+				t.Errorf("expected `%#v`, got `%#v`", tc.result, tok.root)
 			}
 		})
 	}
@@ -41,70 +45,70 @@ func TestParseComplete(t *testing.T) {
 
 func TestParse(t *testing.T) {
 	testCases := []string{
-		"1",
-		"2",
-		"1 + 1",
-		"1 + 2 + 3",
-		"1 - 1",
-		"1 - (1 + 2)",
-		"1 - ((((1 + 2))))",
-		"1 * 2 / 3 * 4",
-		"1 + -1",
-		"1 + +1",
-		"5 % 2",
-		"true",
-		"false",
-		"null",
-		"\"hello\"",
-		"\"he\\\"llo\"",
+		"lax 1",
+		"lax 2",
+		"lax 1 + 1",
+		"lax 1 + 2 + 3",
+		"lax 1 - 1",
+		"lax 1 - (1 + 2)",
+		"lax 1 - ((((1 + 2))))",
+		"lax 1 * 2 / 3 * 4",
+		"lax 1 + -1",
+		"lax 1 + +1",
+		"lax 5 % 2",
+		"lax true",
+		"lax false",
+		"lax null",
+		"lax \"hello\"",
+		"lax \"he\\\"llo\"",
 
-		"$a + 1",
-		"$foobar",
-		"$",
-		"$[last]",
+		"lax $a + 1",
+		"lax $foobar",
+		"lax $",
+		"lax $[last]",
 
-		"$.foo",
-		"$.\"$foo\"",
-		"$.\"$f\\\"oo\"",
-		"$.\"foo bar\"",
-		"$.foo.bar",
-		"$.*",
-		"$[1]",
-		"$[1, 2]",
-		"$[1, 2 to 4]",
-		"$[last]",
-		"$[0, last - 1 to last, 5]",
-		"$[\"hello\"]",
-		"$[*]",
-		"$.type()",
-		"$.size()",
-		"$.double()",
-		"$.ceiling()",
-		"$.floor()",
-		"$.abs()",
-		"$.datetime(\"foobar\")",
-		"$.keyvalue()",
+		"lax $.foo",
+		"lax $.\"$foo\"",
+		"lax $.\"$f\\\"oo\"",
+		"lax $.\"foo bar\"",
+		"lax $.foo.bar",
+		"lax $.*",
+		"lax $[1]",
+		"lax $[1, 2]",
+		"lax $[1, 2 to 4]",
+		"lax $[last]",
+		"lax $[0, last - 1 to last, 5]",
+		"lax $[\"hello\"]",
+		"lax $[*]",
+		"lax $.type()",
+		"lax $.size()",
+		"lax $.double()",
+		"lax $.ceiling()",
+		"lax $.floor()",
+		"lax $.abs()",
+		"lax $.datetime(\"foobar\")",
+		"lax $.keyvalue()",
 
-		"$ ? (exists (@.foobar))",
-		"$ ? (1 == 1)",
-		"$ ? (1 > 1)",
-		"$ ? (1 < 1)",
-		"$ ? (1 <= 1)",
-		"$ ? (1 >= 1)",
-		"$ ? (1 != 1)",
+		"lax $ ? (exists (@.foobar))",
+		"lax $ ? (1 == 1)",
+		"lax $ ? (1 > 1)",
+		"lax $ ? (1 < 1)",
+		"lax $ ? (1 <= 1)",
+		"lax $ ? (1 >= 1)",
+		"lax $ ? (1 != 1)",
 		// "$ ? (1 <> 1)", <- need Parse2 to test this
-		"$ ? (1 != 1 && 1 == 1)",
-		"$ ? (1 != 1 || 1 == 1)",
-		"$ ? ((1 != 1) || 1 == 1)",
-		"$ ? ((1 == 1))",
-		"$ ? (!(1 == 1))",
+		"lax $ ? (1 != 1 && 1 == 1)",
+		"lax $ ? (1 != 1 || 1 == 1)",
+		"lax $ ? ((1 != 1) || 1 == 1)",
+		"lax $ ? ((1 == 1))",
+		"lax $ ? (!(1 == 1))",
 
-		"$ ? (\"foo\" like_regex \"bar\")",
-		"$ ? (\"foo\" like_regex \"bar\" flag \"i\")",
-		"$ ? (\"foo\" starts with \"fo\")",
-		"$ ? ((1 == 1) is unknown)",
+		"lax $ ? (\"foo\" like_regex \"bar\")",
+		"lax $ ? (\"foo\" like_regex \"bar\" flag \"i\")",
+		"lax $ ? (\"foo\" starts with \"fo\")",
+		"lax $ ? ((1 == 1) is unknown)",
 
-		"$ ? (!(1 == 1) is unknown)",
+		"lax $ ? (!(1 == 1) is unknown)",
 	}
 
 	for _, tc := range testCases {
@@ -125,12 +129,12 @@ func TestParseError(t *testing.T) {
 		input  string
 		errMsg string
 	}{
-		{"(", "syntax error: unexpected $end"},
-		{"@.foo", "@ only allowed within filter expressions"},
-		{"$ ? ((@.foo == 1) is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
-		{"@.foo + $ ? ((@.foo == 1) is unknown)[*]", "@ only allowed within filter expressions"},
-		{"$ ? (@.foo)", "filter expressions cannot be raw json values - if you expect `@.foo` to be boolean true, write `@.foo == true`"},
-		{"last", "`last` can only appear inside an array subscript"},
+		{"lax (", "syntax error: unexpected $end"},
+		{"lax @.foo", "@ only allowed within filter expressions"},
+		{"lax $ ? ((@.foo == 1) is unknown)[*] + @.foo", "@ only allowed within filter expressions"},
+		{"lax @.foo + $ ? ((@.foo == 1) is unknown)[*]", "@ only allowed within filter expressions"},
+		{"lax $ ? (@.foo)", "filter expressions cannot be raw json values - if you expect `@.foo` to be boolean true, write `@.foo == true`"},
+		{"lax last", "`last` can only appear inside an array subscript"},
 	}
 
 	for _, tc := range testCases {
