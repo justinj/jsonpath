@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 func main() {
 	flag.Parse()
 	program := flag.Args()
-	fmt.Println(program)
 	machine, err := jsonpath.NewNaiveEvaler(program[0])
 	if err != nil {
 		panic(err)
@@ -21,12 +21,20 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Println("line")
+		var obj interface{}
+		json.Unmarshal([]byte(line), &obj)
+		result, err := machine.Run(obj)
+		if err != nil {
+			panic(err)
+		}
+		if len(result) != 1 {
+			panic(fmt.Sprintf("expected single result, got %d", len(result)))
+		}
+		res, err := json.Marshal(result[0])
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(res))
 	}
 
-	result, err := machine.Run(nil)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(result)
 }
