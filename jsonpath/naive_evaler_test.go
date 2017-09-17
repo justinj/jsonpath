@@ -112,6 +112,8 @@ func TestNaiveEval(t *testing.T) {
 		{"lax 1 ? (true <= false)", `{}`, []string{}},
 		{"lax 1 ? (false <= true)", `{}`, []string{`1`}},
 		{"lax 1 ? (false != true)", `{}`, []string{`1`}},
+		{"lax 1 ? ($[0] == $[1])", `[[1, 2], [2, 3]]`, []string{}},
+		{"lax $[*] ? (@[*] == 2)", `[[1, 2, 3]]`, []string{`[1,2,3]`}},
 
 		// 6.13.6
 		{"lax $[*] ? (@ like_regex 'foo')", `["foo", "bar", "afoob"]`, []string{"\"foo\"", "\"afoob\""}},
@@ -128,11 +130,6 @@ func TestNaiveEval(t *testing.T) {
 		{"lax true ? (((1) == 'one') is unknown)", `{}`, []string{"true"}},
 		{"lax true ? (((1 == 'one') is unknown))", `{}`, []string{"true"}},
 		{"lax true ? ((1 == 1) is unknown)", `{}`, []string{}},
-
-		// ?
-		// {"1 ? ($[0] == $[1])", `[[1, 2], [2, 3]]`, []string{`1`}},
-		// ?
-		// {"$[*] ? (@[*] == 2)", `[[1, 2, 3]]`, []string{`1`, `2`, `3`}},
 	}
 
 	for _, tc := range testCases {

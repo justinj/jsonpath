@@ -1,20 +1,32 @@
-package jsonpath
+package main
 
-func Parse(input string) (jsonPathExpr, error) {
-	yyErrorVerbose = true
-	parser := yyNewParser()
-	tok := tokens(input)
-	parser.Parse(tok)
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"os"
 
-	if tok.err != nil {
-		return nil, tok.err
+	"github.com/justinj/jsonpath/jsonpath"
+)
+
+func main() {
+	flag.Parse()
+	program := flag.Args()
+	fmt.Println(program)
+	machine, err := jsonpath.NewNaiveEvaler(program[0])
+	if err != nil {
+		panic(err)
 	}
 
-	validator := &validationVisitor{}
-	tok.root.Walk(validator)
-	if validator.err != nil {
-		return nil, validator.err
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println("line")
 	}
 
-	return tok.root, nil
+	result, err := machine.Run(nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result)
 }
