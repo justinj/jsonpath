@@ -83,7 +83,7 @@ func compare(x interface{}, y interface{}) cmpResult {
 			return ltResult
 		case 0:
 			return eqResult
-		case 2:
+		case 1:
 			return gtResult
 		}
 	case float64:
